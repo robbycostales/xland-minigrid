@@ -159,8 +159,8 @@ def make_train(
 
             # INIT ENV
             rng, _rng1, _rng2 = jax.random.split(rng, num=3)
-            ruleset_rng = jax.random.split(rng, num=config.num_envs_per_device)
-            reset_rng = jax.random.split(rng, num=config.num_envs_per_device)
+            ruleset_rng = jax.random.split(_rng1, num=config.num_envs_per_device)
+            reset_rng = jax.random.split(_rng2, num=config.num_envs_per_device)
 
             # sample rulesets for this meta update
             rulesets = jax.vmap(benchmark.sample_ruleset)(ruleset_rng)
