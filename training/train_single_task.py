@@ -260,8 +260,10 @@ def make_train(
                 env,
                 env_params,
                 train_state,
-                # TODO: make this as a static method mb?
-                jnp.zeros((1, config.rnn_num_layers, config.rnn_hidden_dim)),
+                jnp.zeros(
+                    (1, config.rnn_num_layers, config.rnn_hidden_dim),
+                    dtype=jnp.bfloat16 if config.enable_bf16 else None,
+                ),
                 1,
             )
             eval_stats = jax.lax.pmean(eval_stats, axis_name="devices")
