@@ -175,3 +175,9 @@ g
 scripts/*testing*
 configs/wip
 scripts/eval_example.py
+
+
+# Robby's stuff
+eval_outputs/
+envs/
+artifacts/

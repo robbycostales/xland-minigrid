@@ -1,5 +1,34 @@
 <h1 align="center">XLand-MiniGrid</h1>
 
+## Robby's notes
+
+Setup:
+
+```bash
+conda create -p ./envs python=3.11 pip -y
+pip install -e ".[dev,baselines]"
+```
+
+
+Manual control:
+```bash
+/home/robby/repos/xland-minigrid/envs/bin/python -m xminigrid.manual_control --env-id XLand-MiniGrid-R1-9x9 --benchmark-id trivial-1m --ruleset-id 0
+```
+
+Running exps:
+```bash
+python training/train_meta_task.py    \
+	--config_path='configs/meta.yaml'   \ 
+	--env_id='XLand-MiniGrid-R1-9x9'
+```
+
+Evaluation (video frames)
+```bash
+python scripts/eval_from_wandb.py --entity shalab --project xminigrid --run-id kjekraaa --out-dir ./eval_outputs/kjekraaa_fast --fps 4 --frame-skip 2 --meta-num-envs 10 --meta-episodes-per-env 4
+```
+
+## Original stuff
+
 <p align="center">
     <a href="https://pypi.python.org/pypi/xminigrid">
         <img src="https://img.shields.io/pypi/pyversions/xminigrid.svg"/>

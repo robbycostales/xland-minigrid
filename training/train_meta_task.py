@@ -2,24 +2,27 @@
 # https://github.com/lupuandr/explainable-policies/blob/50acbd777dc7c6d6b8b7255cd1249e81715bcb54/purejaxrl/ppo_rnn.py#L4
 # https://github.com/lcswillems/rl-starter-files/blob/master/model.py
 import os
-import shutil
+import math
 import time
+import numpy as np
+import tempfile
 from dataclasses import asdict, dataclass
 from functools import partial
-from typing import Optional
+from typing import Optional, Any, cast
 
 import jax
 import jax.numpy as jnp
 import jax.tree_util as jtu
 import optax
-import orbax
+import orbax.checkpoint as ocp  # type: ignore[attr-defined]
 import pyrallis
 import wandb
 from flax.jax_utils import replicate, unreplicate
 from flax.training import orbax_utils
 from flax.training.train_state import TrainState
 from nn import ActorCriticRNN
-from utils import Transition, calculate_gae, ppo_update_networks, rollout
+from utils import Transition, calculate_gae, ppo_update_networks, rollout, rollout_host
+import imageio.v3 as iio
 
 import xminigrid
 from xminigrid.benchmarks import Benchmark
@@ -71,12 +74,27 @@ class TrainConfig:
         self.num_envs_per_device = self.num_envs // num_devices
         self.total_timesteps_per_device = self.total_timesteps // num_devices
         self.eval_num_envs_per_device = self.eval_num_envs // num_devices
-        assert self.num_envs % num_devices == 0
-        self.num_meta_updates = round(
-            self.total_timesteps_per_device / (self.num_envs_per_device * self.num_steps_per_env)
-        )
+        if self.num_envs % num_devices != 0:
+            raise ValueError(
+                f"num_envs ({self.num_envs}) must be divisible by the number of devices ({num_devices})."
+            )
+        total_env_steps_per_meta = self.num_envs_per_device * self.num_steps_per_env
+        if total_env_steps_per_meta == 0:
+            raise ValueError("num_envs_per_device * num_steps_per_env must be > 0")
+        # validate enough total timesteps to run at least one meta update
+        min_total_timesteps = total_env_steps_per_meta * num_devices
+        if self.total_timesteps > 0 and self.total_timesteps < min_total_timesteps:
+            raise ValueError(
+                "total_timesteps is too small for at least one meta update. "
+                f"Provide at least num_envs * num_steps_per_env per device. For your setup: "
+                f"min_total_timesteps = {self.num_envs} * {self.num_steps_per_env} = {min_total_timesteps}. "
+                f"Got total_timesteps={self.total_timesteps}."
+            )
+        ratio = self.total_timesteps_per_device / total_env_steps_per_meta
+        self.num_meta_updates = 0 if self.total_timesteps == 0 else math.ceil(ratio)
         self.num_inner_updates = self.num_steps_per_env // self.num_steps_per_update
-        assert self.num_steps_per_env % self.num_steps_per_update == 0
+        if self.num_steps_per_env % self.num_steps_per_update != 0:
+            raise ValueError("num_steps_per_env must be divisible by num_steps_per_update")
         print(f"Num devices: {num_devices}, Num meta updates: {self.num_meta_updates}")
 
 
@@ -119,7 +137,7 @@ def make_states(config: TrainConfig):
         dtype=jnp.bfloat16 if config.enable_bf16 else None,
     )
     # [batch_size, seq_len, ...]
-    shapes = env.observation_shape(env_params)
+    shapes: dict[str, Any] = env.observation_shape(env_params)  # type: ignore[assignment]
 
     init_obs = {
         "obs_img": jnp.zeros((config.num_envs_per_device, 1, *shapes["img"])),
@@ -322,7 +340,7 @@ def make_train(
     return train
 
 
-@pyrallis.wrap()
+@pyrallis.wrap()  # type: ignore[attr-defined]
 def train(config: TrainConfig):
     # logging to wandb
     run = wandb.init(
@@ -332,9 +350,7 @@ def train(config: TrainConfig):
         config=asdict(config),
         save_code=True,
     )
-    # removing existing checkpoints if any
-    if config.checkpoint_path is not None and os.path.exists(config.checkpoint_path):
-        shutil.rmtree(config.checkpoint_path)
+    # no local checkpoint handling; artifacts only
 
     rng, env, env_params, benchmark, init_hstate, train_state = make_states(config)
     # replicating args across devices
@@ -368,15 +384,24 @@ def train(config: TrainConfig):
     run.summary["training_time"] = elapsed_time
     run.summary["steps_per_second"] = (config.total_timesteps_per_device * jax.local_device_count()) / elapsed_time
 
-    if config.checkpoint_path is not None:
-        checkpoint = {"config": asdict(config), "params": unreplicate(train_info)["state"].params}
-        orbax_checkpointer = orbax.checkpoint.PyTreeCheckpointer()
+    # Always save final checkpoint to a temporary directory and upload to W&B as an artifact
+    checkpoint = {"config": asdict(config), "params": unreplicate(train_info)["state"].params}
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Save into a non-existent subdirectory (Orbax will create it)
+        ckpt_dir = os.path.join(tmpdir, "ckpt")
+        checkpointer = ocp.PyTreeCheckpointer()
         save_args = orbax_utils.save_args_from_target(checkpoint)
-        orbax_checkpointer.save(config.checkpoint_path, checkpoint, save_args=save_args)
+        checkpointer.save(ckpt_dir, checkpoint, save_args=save_args)
+
+        # Create and log W&B artifact from the checkpoint directory
+        artifact_name = f"final-weights-{run.id}"
+        artifact = wandb.Artifact(name=artifact_name, type="model")
+        artifact.add_dir(ckpt_dir)
+        run.log_artifact(artifact)
 
     print("Final return: ", float(loss_info["eval/returns_mean"][-1]))
     run.finish()
 
 
 if __name__ == "__main__":
-    train()
+    train()  # type: ignore[call-arg]

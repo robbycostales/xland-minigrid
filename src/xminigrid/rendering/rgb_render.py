@@ -263,3 +263,16 @@ def render(
             img[ymin:ymax, xmin:xmax, :] = tile_img
 
     return img
+
+
+def render_frame_fast(
+    grid: np.ndarray,
+    agent_pos: np.ndarray,
+    agent_dir: int,
+    view_size: int,
+    *,
+    tile_size: int = 24,
+) -> np.ndarray:
+    import jax.numpy as jnp
+    agent = AgentState(position=jnp.asarray(agent_pos), direction=jnp.asarray(agent_dir))
+    return render(grid, agent=agent, view_size=view_size, tile_size=tile_size)

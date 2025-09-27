@@ -1,0 +1,20 @@
+# Based on meta.yaml—but with total_timesteps set to a value that ensures at least one meta update. 
+
+# NOTE:
+# A valid configuration must ensure at least one meta update runs.
+# One meta update consumes num_envs * num_steps_per_env transitions per device.
+# With 1 device, min_total_timesteps = num_envs * num_steps_per_env.
+# For this file: 16384 * 12800 = 209,715,200. Set total_timesteps >= that value.
+env_id: "XLand-MiniGrid-R4-13x13"
+benchmark_id: "high-1m"
+# Choose total_timesteps so that total_timesteps >= num_envs * num_steps_per_env.
+# Example minimum for this config (1 device): 16384 * 12800 = 209_715_200.
+total_timesteps: 210_000_000
+num_envs: 16384
+num_steps_per_env: 12800
+num_steps_per_update: 256
+update_epochs: 1
+num_minibatches: 16
+eval_num_envs: 16384
+eval_num_episodes: 25
+train_seed: 5
