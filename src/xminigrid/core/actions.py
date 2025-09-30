@@ -3,12 +3,13 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 from typing_extensions import TypeAlias
+from typing import Tuple
 
 from ..types import AgentState, GridState, IntOrArray
 from .constants import DIRECTIONS, TILES_REGISTRY, Colors, Tiles
 from .grid import check_can_put, check_pickable, check_walkable, equal
 
-ActionOutput: TypeAlias = tuple[GridState, AgentState, jax.Array]
+ActionOutput: TypeAlias = Tuple[GridState, AgentState, jax.Array]
 
 
 def _move(position: jax.Array, direction: jax.Array) -> jax.Array:
@@ -20,8 +21,8 @@ def _move(position: jax.Array, direction: jax.Array) -> jax.Array:
 def move_forward(grid: GridState, agent: AgentState) -> ActionOutput:
     next_position = jnp.clip(
         _move(agent.position, agent.direction),
-        min=jnp.array((0, 0)),
-        max=jnp.array((grid.shape[0] - 1, grid.shape[1] - 1)),  # H, W
+        jnp.array((0, 0)),
+        jnp.array((grid.shape[0] - 1, grid.shape[1] - 1)),  # H, W
     )
     position = jax.lax.select(
         check_walkable(grid, next_position),
