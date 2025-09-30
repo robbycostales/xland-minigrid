@@ -10,7 +10,10 @@ import jax
 import jax.numpy as jnp
 from flax.linen.dtypes import promote_dtype
 from flax.linen.initializers import glorot_normal, orthogonal, zeros_init
-from flax.typing import Dtype
+try:
+    from flax.typing import Dtype
+except Exception:
+    from typing import Any as Dtype
 
 from xminigrid.core.constants import NUM_COLORS, NUM_TILES
 
